@@ -32,6 +32,180 @@ function formatTime(iso) {
   return isToday ? hm : `${date.getMonth() + 1}-${date.getDate()} ${hm}`;
 }
 
+// ==================== 灵感星河 3D 拓扑网络绘制 (Memory Echo Visualizer) ====================
+let stellarNodes = [];
+let stellarLinks = [];
+let stellarAngleX = 0.002;
+let stellarAngleY = 0.002;
+
+function initStellarNetwork() {
+  const canvas = $("#stellarCanvas");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const container = $("#stellarCanvasContainer");
+
+  function resize() {
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // 根据当前的想法列表 state.notes 渲染星空拓扑节点和交叉双链
+  function updateNodes() {
+    const notes = state.notes.slice(0, 30); // 提取前30条用于画面星轨渲染，防止卡顿
+    const tempNodes = [];
+    const tempLinks = [];
+    const noteMap = {};
+
+    notes.forEach((note, index) => {
+      // 3D 极坐标映射：让节点像星团一样错落排布
+      const phi = Math.acos(-1 + (2 * index) / notes.length);
+      const theta = Math.sqrt(notes.length * Math.PI) * phi;
+      const radius = 90 + Math.random() * 30; // 核心聚集半径
+
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = radius * Math.sin(phi) * Math.sin(theta);
+      const z = radius * Math.cos(phi);
+
+      const typeColors = {
+        "待办": "#c8553d",
+        "决策": "#4f7a5b",
+        "灵感": "#c9a227",
+        "引用": "#7c6bb0",
+        "素材": "#4a7c96"
+      };
+
+      const node = {
+        id: note.id,
+        title: note.title,
+        type: note.type,
+        color: typeColors[note.type] || "#8a8175",
+        x3d: x,
+        y3d: y,
+        z3d: z,
+        x2d: 0,
+        y2d: 0,
+        size: 5 + (note.tags || []).length * 1.5,
+        projX: 0,
+        projY: 0,
+        visible: true
+      };
+      tempNodes.push(node);
+      noteMap[note.id] = node;
+    });
+
+    // 交叉双链连线建立 (记忆回声线)
+    notes.forEach((note) => {
+      const sourceNode = noteMap[note.id];
+      if (!sourceNode) return;
+      (note.related_ids || []).forEach((relId) => {
+        const targetNode = noteMap[relId];
+        if (targetNode) {
+          tempLinks.push({ source: sourceNode, target: targetNode });
+        }
+      });
+    });
+
+    stellarNodes = tempNodes;
+    stellarLinks = tempLinks;
+  }
+
+  // 3D 旋转及投影函数
+  function rotate3D() {
+    const cosX = Math.cos(stellarAngleX);
+    const sinX = Math.sin(stellarAngleX);
+    const cosY = Math.cos(stellarAngleY);
+    const sinY = Math.sin(stellarAngleY);
+
+    stellarNodes.forEach((node) => {
+      // 绕 X 轴旋转
+      const y1 = node.y3d * cosX - node.z3d * sinX;
+      const z1 = node.z3d * cosX + node.y3d * sinX;
+      
+      // 绕 Y 轴旋转
+      const x2 = node.x3d * cosY - z1 * sinY;
+      const z2 = z1 * cosY + node.x3d * sinY;
+
+      node.x3d = x2;
+      node.y3d = y1;
+      node.z3d = z2;
+
+      // 投影至 2D Canvas（透视投影）
+      const fov = 300; // 视距
+      const cameraDistance = 250;
+      const scale = fov / (fov + node.z3d + cameraDistance);
+      node.projX = canvas.width / 2 + node.x3d * scale * 1.2;
+      node.projY = canvas.height / 2 + node.y3d * scale * 1.2;
+      node.scale = scale;
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    rotate3D();
+
+    // 1. 绘制背景星尘点
+    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+    for (let i = 0; i < 20; i++) {
+      const x = (Math.sin(i + Date.now() * 0.0001) * 0.5 + 0.5) * canvas.width;
+      const y = (Math.cos(i * 1.5 + Date.now() * 0.0001) * 0.5 + 0.5) * canvas.height;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+
+    // 2. 绘制关联荧光连线 (记忆回声)
+    stellarLinks.forEach((link) => {
+      const alpha = Math.min(link.source.scale, link.target.scale) * 0.25;
+      ctx.strokeStyle = `rgba(0, 255, 204, ${alpha})`;
+      ctx.lineWidth = 1.2 * Math.min(link.source.scale, link.target.scale);
+      ctx.beginPath();
+      ctx.moveTo(link.source.projX, link.source.projY);
+      ctx.lineTo(link.target.projX, link.target.projY);
+      ctx.stroke();
+    });
+
+    // 3. 绘制灵感卡片节点
+    stellarNodes.forEach((node) => {
+      const alpha = node.scale * 0.8;
+      const r = Math.max(1, node.size * node.scale * 0.8);
+
+      // 外圈光晕 (Glow Effect)
+      const grad = ctx.createRadialGradient(node.projX, node.projY, 0, node.projX, node.projY, r * 3);
+      grad.addColorStop(0, `${node.color}`);
+      grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(node.projX, node.projY, r * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 核心球体
+      ctx.fillStyle = node.color;
+      ctx.beginPath();
+      ctx.arc(node.projX, node.projY, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 文字浮现：高价值（大尺寸）或距离镜头近的节点浮现文字
+      if (node.scale > 0.95) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${(node.scale - 0.95) * 10})`;
+        ctx.font = "9px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(node.title, node.projX, node.projY - r - 6);
+      }
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  // 监听并动态更新拓扑结构
+  window.addEventListener("stellar-update", updateNodes);
+  updateNodes();
+  draw();
+}
+
+function triggerStellarUpdate() {
+  window.dispatchEvent(new Event("stellar-update"));
+}
+
 function cardHtml(note) {
   const tags = (note.tags || []).map((tag) => `<span class="tag">#${escapeHtml(tag)}</span>`).join("");
   const actions = (note.action_items || []).length
@@ -72,6 +246,7 @@ async function loadNotes() {
   const data = await api(`/api/notes?${params.toString()}`);
   state.notes = data.items || [];
   render();
+  triggerStellarUpdate(); // 每次数据刷新，强制星河拓扑进行 3D 动力学重算连线
 }
 
 async function loadStats() {
@@ -406,4 +581,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
   loadNotes().catch((error) => setHint(`加载失败：${error.message}`, true));
   loadStats().catch(() => {});
+  initStellarNetwork(); // 在页面加载完成后，100% 自动激活 3D 灵感星河渲染画布！
 });
