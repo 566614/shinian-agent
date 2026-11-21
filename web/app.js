@@ -150,31 +150,75 @@ function initStellarNetwork() {
     }
   }
 
-  // ================= 增加鼠标和手势触控 3D 旋转交互 =================
+  // ================= 增加鼠标和手势触控 3D 旋转交互 + 节点点击悬停震动交互 =================
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
+  let hoveredNode = null;
+  let clickedNode = null;
+
+  // 鼠标悬停及交互探测 (S+级空间碰撞检测)
+  canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    if (isDragging) {
+      const deltaMove = {
+        x: e.clientX - previousMousePosition.x,
+        y: e.clientY - previousMousePosition.y
+      };
+      stellarAngleY = deltaMove.x * 0.005;
+      stellarAngleX = -deltaMove.y * 0.005;
+      previousMousePosition = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
+    // 寻找最近的碰撞节点
+    let found = null;
+    stellarNodes.forEach((node) => {
+      const dist = Math.hypot(node.projX - mouseX, node.projY - mouseY);
+      if (dist < (node.size * node.scale + 6)) {
+        found = node;
+      }
+    });
+
+    if (found !== hoveredNode) {
+      hoveredNode = found;
+      canvas.style.cursor = found ? "pointer" : "default";
+    }
+  });
 
   canvas.addEventListener("mousedown", (e) => {
     isDragging = true;
     previousMousePosition = { x: e.clientX, y: e.clientY };
-  });
 
-  window.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const deltaMove = {
-      x: e.clientX - previousMousePosition.x,
-      y: e.clientY - previousMousePosition.y
-    };
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-    // 旋转角速度随拖拽距离变化
-    stellarAngleY = deltaMove.x * 0.005;
-    stellarAngleX = -deltaMove.y * 0.005;
+    // 点击节点触发记忆共振 (S+级全息引力波震动)
+    let clicked = null;
+    stellarNodes.forEach((node) => {
+      const dist = Math.hypot(node.projX - mouseX, node.projY - mouseY);
+      if (dist < (node.size * node.scale + 8)) {
+        clicked = node;
+      }
+    });
 
-    previousMousePosition = { x: e.clientX, y: e.clientY };
-  });
-
-  window.addEventListener("mouseup", () => {
-    isDragging = false;
+    if (clicked) {
+      clickedNode = clicked;
+      // 触发爆发式旋转激荡
+      stellarAngleX = (Math.random() - 0.5) * 0.08;
+      stellarAngleY = (Math.random() - 0.5) * 0.08;
+      
+      // 触发眼镜 HUD 模拟框数据联动
+      const targetNote = state.notes.find(n => n.id === clicked.id);
+      if (targetNote) {
+        triggerHudPreview(targetNote);
+      }
+    } else {
+      clickedNode = null;
+    }
   });
 
   // 支持手机端/AR触控交互
@@ -216,9 +260,18 @@ function initStellarNetwork() {
 
     // 2. 绘制关联荧光连线 (记忆回声)
     stellarLinks.forEach((link) => {
-      const alpha = Math.min(link.source.scale, link.target.scale) * 0.25;
-      ctx.strokeStyle = `rgba(0, 255, 204, ${alpha})`;
-      ctx.lineWidth = 1.2 * Math.min(link.source.scale, link.target.scale);
+      let alpha = Math.min(link.source.scale, link.target.scale) * 0.25;
+      let strokeColor = `rgba(0, 255, 204, ${alpha})`;
+      
+      // 如果当前连线被选中的节点触发，强行高亮变色、加粗
+      if (clickedNode && (link.source.id === clickedNode.id || link.target.id === clickedNode.id)) {
+        strokeColor = `rgba(255, 196, 107, ${Math.min(link.source.scale, link.target.scale) * 0.8})`;
+        ctx.lineWidth = 2.5 * Math.min(link.source.scale, link.target.scale);
+      } else {
+        ctx.lineWidth = 1.2 * Math.min(link.source.scale, link.target.scale);
+      }
+      
+      ctx.strokeStyle = strokeColor;
       ctx.beginPath();
       ctx.moveTo(link.source.projX, link.source.projY);
       ctx.lineTo(link.target.projX, link.target.projY);
