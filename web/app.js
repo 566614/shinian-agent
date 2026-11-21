@@ -105,7 +105,11 @@ async function submitText() {
       body: JSON.stringify({ text, source: "web" }),
     });
     input.value = "";
-    setHint("已收进拾念，并自动整理成卡片。");
+    if (resNote.is_undo) {
+      setHint("已撤销记录。");
+    } else {
+      setHint("已收进拾念，并自动整理成卡片。");
+    }
     triggerHudPreview(resNote);
     await Promise.all([loadNotes(), loadStats()]);
   } catch (error) {
@@ -121,11 +125,24 @@ function triggerHudPreview(note) {
   const tag = $("#hudTag");
   const title = $("#hudTitle");
   const action = $("#hudAction");
+  const undoState = $("#hudUndoState");
 
-  if (!prompt || !cardPreview) return;
+  if (!prompt || !cardPreview || !undoState) return;
+
+  if (note.is_undo) {
+    prompt.hidden = true;
+    cardPreview.hidden = true;
+    undoState.hidden = false;
+    setTimeout(() => {
+      prompt.hidden = false;
+      undoState.hidden = true;
+    }, 2000);
+    return;
+  }
 
   prompt.hidden = true;
   cardPreview.hidden = false;
+  undoState.hidden = true;
   tag.textContent = note.type || "灵感";
   title.textContent = note.title || "未命名";
   action.textContent = note.action_items && note.action_items.length ? `→ ${note.action_items[0]}` : "";
@@ -140,10 +157,63 @@ let recorder = null;
 let chunks = [];
 let startedAt = 0;
 let timer = null;
+let audioCtx = null;
+let analyser = null;
+let dataArray = null;
+let sourceNode = null;
+let drawVisual = null;
+let audioStream = null;
+
+function initWaveCanvas() {
+  const canvas = $("#hudWaveCanvas");
+  const canvasCtx = canvas.getContext("2d");
+  const waveContainer = $("#hudWaveContainer");
+
+  function resize() {
+    canvas.width = waveContainer.clientWidth;
+    canvas.height = waveContainer.clientHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function draw() {
+    if (!analyser) return;
+    drawVisual = requestAnimationFrame(draw);
+
+    const bufferLength = analyser.frequencyBinCount;
+    analyser.getByteFrequencyData(dataArray);
+
+    canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const barWidth = (canvas.width / bufferLength) * 2.5;
+    let barHeight;
+    let x = 0;
+
+    for (let i = 0; i < bufferLength; i++) {
+      // 声音能量映射到高度
+      barHeight = dataArray[i] / 2;
+      if (barHeight < 2) barHeight = 2; // 哪怕没有声音，也有微弱的律动
+
+      // Rokid Glasses 经典的荧光绿、青色渐变
+      const gradient = canvasCtx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
+      gradient.addColorStop(0, "rgba(0, 255, 204, 0.2)");
+      gradient.addColorStop(0.5, "rgba(0, 255, 204, 0.8)");
+      gradient.addColorStop(1, "rgba(56, 189, 248, 1)");
+
+      canvasCtx.fillStyle = gradient;
+      canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
+
+      x += barWidth;
+    }
+  }
+
+  draw();
+}
 
 async function toggleRecord() {
   const button = $("#recordBtn");
   const label = $("#recordLabel");
+  const waveContainer = $("#hudWaveContainer");
 
   if (recorder && recorder.state === "recording") {
     recorder.stop();
@@ -157,6 +227,25 @@ async function toggleRecord() {
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioStream = stream;
+    
+    // 初始化 Web Audio 渲染波形
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64; // 较小的fft使得波形更加柔和，柱状感更强
+      sourceNode = audioCtx.createMediaStreamSource(stream);
+      sourceNode.connect(analyser);
+      
+      const bufferLength = analyser.frequencyBinCount;
+      dataArray = new Uint8Array(bufferLength);
+      
+      waveContainer.hidden = false;
+      initWaveCanvas();
+    } catch (ae) {
+      console.warn("Web Audio Context initialization failed:", ae);
+    }
+
     recorder = new MediaRecorder(stream);
     chunks = [];
     recorder.ondataavailable = (event) => {
@@ -164,6 +253,19 @@ async function toggleRecord() {
     };
     recorder.onstop = async () => {
       clearInterval(timer);
+      if (drawVisual) {
+        cancelAnimationFrame(drawVisual);
+        drawVisual = null;
+      }
+      if (audioCtx) {
+        audioCtx.close();
+        audioCtx = null;
+      }
+      analyser = null;
+      dataArray = null;
+      sourceNode = null;
+      waveContainer.hidden = true;
+      
       stream.getTracks().forEach((track) => track.stop());
       button.classList.remove("recording");
       label.textContent = "开始记录";
@@ -189,8 +291,13 @@ async function uploadAudio(blob) {
   form.append("file", blob, "note.webm");
   setHint("正在转写并整理…");
   try {
-    await api("/api/notes/audio", { method: "POST", body: form });
-    setHint("已记录，并自动整理成卡片。");
+    const resNote = await api("/api/notes/audio", { method: "POST", body: form });
+    if (resNote.is_undo) {
+      setHint("已撤销记录。");
+    } else {
+      setHint("已记录，并自动整理成卡片。");
+    }
+    triggerHudPreview(resNote);
     await Promise.all([loadNotes(), loadStats()]);
   } catch (error) {
     setHint(`语音记录失败：${error.message}`, true);
@@ -234,6 +341,17 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#exportObsidianBtn").addEventListener("click", () => {
     window.location.href = "/api/export/obsidian";
   });
+
+  // 实时同步 ROKID GLASSES HUD 模拟钟表
+  const clockEl = $("#hudClock");
+  if (clockEl) {
+    const updateClock = () => {
+      const now = new Date();
+      clockEl.textContent = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    };
+    updateClock();
+    setInterval(updateClock, 1000);
+  }
 
   $("#text").addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submitText();

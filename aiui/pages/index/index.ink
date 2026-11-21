@@ -122,6 +122,19 @@ function padNumber(value) {
 
 function buildCard(text) {
   const clean = cleanText(text);
+  const isUndo = typeof text === "string" && (text.indexOf("算了") >= 0 || text.indexOf("不记了") >= 0 || text.indexOf("取消") >= 0);
+  if (isUndo) {
+    const now = new Date();
+    return {
+      title: "已撤销",
+      summary: "口口声声说算了，已撤销本次记录",
+      type: "撤销",
+      tags: ["撤销"],
+      footer: "● 已撤销",
+      time: padNumber(now.getHours()) + ":" + padNumber(now.getMinutes()),
+      isUndo: true
+    };
+  }
   const content = clean || "想到什么，随口说一句";
   const type = pickType(content);
   const action = pickAction(content);
@@ -133,7 +146,8 @@ function buildCard(text) {
     type: type,
     tags: pickTags(content, type),
     footer: action ? "下一步：" + action : "已存入今日卡片",
-    time: padNumber(now.getHours()) + ":" + padNumber(now.getMinutes())
+    time: padNumber(now.getHours()) + ":" + padNumber(now.getMinutes()),
+    isUndo: false
   };
 }
 
@@ -200,6 +214,18 @@ export default {
   border: 1.5px solid rgba(255, 196, 107, 0.45);
   background: linear-gradient(145deg, rgba(44, 35, 25, 0.96) 0%, rgba(22, 18, 14, 0.98) 100%);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(rgba(18, 16, 13, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  background-size: 100% 4px, 6px 100%;
+  opacity: 0.15;
+  pointer-events: none;
 }
 
 .head {

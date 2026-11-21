@@ -39,9 +39,22 @@ def test_patch_and_delete(client):
 
 
 def test_reviews(client):
-    client.post("/api/notes", json={"text": "今天想到用旧木纹做包装"})
-    daily = client.get("/api/review/daily").json()
-    weekly = client.get("/api/review/weekly").json()
-    assert daily["total"] >= 1
-    assert "今日回顾" in daily["markdown"]
-    assert "本周想法周报" in weekly["markdown"]
+    client.post("/api/notes", json={"text": "今天想到用旧木纹做包装 #选品"})
+    daily_res = client.get("/api/review/daily").json()
+    weekly_res = client.get("/api/review/weekly").json()
+    assert daily_res["total"] >= 1
+    assert "今日回顾" in daily_res["markdown"]
+    assert "本周想法周报" in weekly_res["markdown"]
+    
+    # 验证聚类功能在 weekly review 中返回
+    assert "clusters" in weekly_res
+    assert "关于 #选品 的思考" in weekly_res["clusters"]
+
+
+def test_share_poster_endpoint(client):
+    note = client.post("/api/notes", json={"text": "定稿海报生成功能测试 #测试"}).json()
+    res = client.get(f"/api/export/poster/{note['id']}")
+    assert res.status_code == 200
+    assert "<title>" in res.text
+    assert "拾念海报" in res.text
+    assert "测试" in res.text

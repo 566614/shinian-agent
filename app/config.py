@@ -32,6 +32,7 @@ class Settings:
         self.llm_model = os.getenv("SHINIAN_LLM_MODEL", "gpt-4o-mini").strip()
         self.asr_model = os.getenv("SHINIAN_ASR_MODEL", "whisper-1").strip()
         self.audio_dir = os.getenv("SHINIAN_AUDIO_DIR", "data/audio").strip() or "data/audio"
+        self.obsidian_vault = os.getenv("SHINIAN_OBSIDIAN_VAULT", "C:/Users/Lenovo/Desktop/阮/Wiki/Inbox/").strip() or "C:/Users/Lenovo/Desktop/阮/Wiki/Inbox/"
 
     @property
     def llm_enabled(self) -> bool:

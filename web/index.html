@@ -41,6 +41,9 @@
 
     <section class="spatial-preview" aria-label="Rokid AR 眼镜视角模拟">
       <div class="hud-box">
+        <div class="hud-scanlines"></div>
+        <div class="hud-chromatic"></div>
+        <div class="hud-lens-curve"></div>
         <div class="hud-header">
           <span class="hud-dot"></span>
           <span class="hud-status">ROKID GLASSES HUD · 1.5s 极速确认</span>
@@ -53,6 +56,12 @@
             <div class="hud-title" id="hudTitle">包装方案讨论</div>
             <div class="hud-action" id="hudAction">→ 明天把包装方案发给阿哲</div>
           </div>
+          <div class="hud-undo-state" id="hudUndoState" hidden>
+            <span class="hud-undo-dot">●</span> 已撤销
+          </div>
+        </div>
+        <div class="hud-wave-container" id="hudWaveContainer" hidden>
+          <canvas id="hudWaveCanvas"></canvas>
         </div>
       </div>
     </section>

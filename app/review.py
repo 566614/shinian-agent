@@ -52,7 +52,34 @@ def weekly(store: Store) -> dict[str, Any]:
     open_todos = [n for n in notes if n["type"] == "待办" and n["status"] != "done"]
     ideas = [n for n in notes if n["type"] == "灵感"][:3]
 
+    # 本地轻量级关键字/标签聚类分组 (Weekly Clusterization)
+    # 把想法根据主要的 tag (即 tags 中的第一个或者高频的 tag) 进行分组聚类，并命名为 "关于 #Tag 的思考"
+    clusters: dict[str, list[dict[str, Any]]] = {}
+    for note in notes:
+        # 寻找本条笔记的主要 tag，如果有 tags，则使用第一个作为主要分类基础
+        note_tags = note.get("tags") or []
+        if note_tags:
+            primary_tag = note_tags[0]
+            cluster_name = f"关于 #{primary_tag} 的思考"
+        else:
+            cluster_name = "未分类的想法"
+        
+        if cluster_name not in clusters:
+            clusters[cluster_name] = []
+        clusters[cluster_name].append(note)
+
     lines = ["📮 拾念 · 本周想法周报", f"共记录 {len(notes)} 条想法"]
+    
+    if clusters:
+        lines.append("")
+        lines.append("🧩 主题聚类 (Topic Clusters)")
+        for cluster_title, cluster_notes in clusters.items():
+            lines.append(f"### {cluster_title}")
+            for cn in cluster_notes[:5]: # 每个聚类最多展示5条
+                lines.append(f"- {cn['title']}——{cn['summary']}")
+            if len(cluster_notes) > 5:
+                lines.append(f"  *等共 {len(cluster_notes)} 条想法*")
+
     if tags:
         lines.append("")
         lines.append("本周高频主题")
@@ -69,12 +96,22 @@ def weekly(store: Store) -> dict[str, Any]:
         for note in open_todos:
             lines.append(f"- [ ] {note['title']}")
 
+    # 序列化 clusters
+    serialized_clusters = {
+        name: [
+            {"id": n["id"], "title": n["title"], "summary": n["summary"], "created_at": n["created_at"]}
+            for n in c_notes
+        ]
+        for name, c_notes in clusters.items()
+    }
+
     return {
         "start": _week_start(store)[:10],
         "total": len(notes),
         "tags": dict(tags.most_common(10)),
         "open_todos": open_todos,
         "notes": notes,
+        "clusters": serialized_clusters,
         "markdown": "\n".join(lines),
     }
 

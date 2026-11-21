@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from .agent import NoteAgent
 from .asr import transcribe_audio
 from .config import Settings
-from .export import export_obsidian_zip, to_obsidian_markdown, to_share_card_html
+from .export import export_obsidian_zip, to_obsidian_markdown, to_share_card_html, to_share_poster_html
 from .review import daily, stats, weekly
 from .schemas import NoteCreate, NotePatch
 from .store import Store
@@ -138,6 +138,14 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         if not note:
             raise HTTPException(status_code=404, detail="想法不存在")
         html = to_share_card_html(note)
+        return HTMLResponse(content=html)
+
+    @app.get("/api/export/poster/{note_id}", response_class=HTMLResponse)
+    def export_poster(note_id: int) -> HTMLResponse:
+        note = store.get(note_id)
+        if not note:
+            raise HTTPException(status_code=404, detail="想法不存在")
+        html = to_share_poster_html(note)
         return HTMLResponse(content=html)
 
     if WEB_DIR.exists():
