@@ -224,7 +224,7 @@ class NoteAgent:
         self.settings = settings
         self.store = store
 
-    def process(
+    async def process(
         self,
         text: str,
         scene: Optional[str] = None,
@@ -234,7 +234,7 @@ class NoteAgent:
         created_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         text = text.strip()
-        data = self._extract(text)
+        data = await self._extract(text)
         data = self._normalize(data, text)
 
         # 100分级 Time Resolution 核心时间解析与注入
@@ -271,10 +271,10 @@ class NoteAgent:
         )
         return self.store.create(data)
 
-    def _extract(self, text: str) -> Dict[str, Any]:
+    async def _extract(self, text: str) -> Dict[str, Any]:
         if self.settings.llm_enabled:
             try:
-                return extract_with_llm(text, self.settings)
+                return await extract_with_llm(text, self.settings)
             except Exception:
                 pass
         return self._heuristic(text)

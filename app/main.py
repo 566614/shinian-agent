@@ -49,11 +49,11 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         }
 
     @app.post("/api/notes")
-    def create_note(payload: NoteCreate) -> dict:
-        return agent.process(payload.text, payload.scene, payload.location, payload.source)
+    async def create_note(payload: NoteCreate) -> dict:
+        return await agent.process(payload.text, payload.scene, payload.location, payload.source)
 
     @app.post("/api/notes/audio")
-    def create_audio_note(
+    async def create_audio_note(
         file: UploadFile = File(...),
         scene: Optional[str] = Form(None),
         location: Optional[str] = Form(None),
@@ -67,7 +67,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
                 detail="未配置语音转写服务（OPENAI_API_KEY），请先用文字记录",
             )
         try:
-            text = transcribe_audio(
+            text = await transcribe_audio(
                 data, file.filename or "audio.webm", file.content_type or "audio/webm", settings
             )
         except Exception as exc:  # 外部服务失败时给出可读提示
@@ -79,7 +79,7 @@ def create_app(db_path: Optional[str] = None) -> FastAPI:
         audio_path = os.path.join(settings.audio_dir, f"{uuid.uuid4().hex}.webm")
         with open(audio_path, "wb") as fh:
             fh.write(data)
-        return agent.process(text, scene, location, "glasses", audio_path=audio_path)
+        return await agent.process(text, scene, location, "glasses", audio_path=audio_path)
 
     @app.get("/api/notes")
     def list_notes(

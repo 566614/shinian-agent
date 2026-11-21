@@ -81,14 +81,14 @@ EXTRACTION_SYSTEM_PROMPT = """你是一个在 AR 空间计算和人机对话领�
 """
 
 
-def extract_with_llm(text: str, settings: Settings) -> Dict[str, Any]:
+async def extract_with_llm(text: str, settings: Settings) -> Dict[str, Any]:
     """
-    调用 OpenAI/Rokid 大赛官方兼容接口做 100 分超精准认知结构化。
+    异步调用 OpenAI/Rokid 大赛官方兼容接口做 100 分超精准认知结构化。
     """
-    from openai import OpenAI
+    from openai import AsyncOpenAI
 
-    client = OpenAI(api_key=settings.api_key, base_url=settings.base_url, timeout=25)
-    resp = client.chat.completions.create(
+    client = AsyncOpenAI(api_key=settings.api_key, base_url=settings.base_url, timeout=25)
+    resp = await client.chat.completions.create(
         model=settings.llm_model,
         temperature=0.1,  # 降低温度，确保极度稳定的逻辑结构
         response_format={"type": "json_object"},
