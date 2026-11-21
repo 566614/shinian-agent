@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F6F1E7">
+  <title>拾念 · 想到就说</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="logo">拾</span>
+        <div>
+          <h1>拾念</h1>
+          <p>想到就说，说完就能用</p>
+        </div>
+      </div>
+      <button id="reviewBtn" class="ghost" type="button">本周回顾</button>
+    </header>
+
+    <section class="stats" aria-label="统计">
+      <div class="stat"><strong id="statToday">0</strong><span>今日记录</span></div>
+      <div class="stat"><strong id="statTodos">0</strong><span>未完成待办</span></div>
+      <div class="stat"><strong id="statStreak">0</strong><span>连续天数</span></div>
+      <div class="stat"><strong id="statTotal">0</strong><span>全部想法</span></div>
+    </section>
+
+    <section class="capture">
+      <textarea id="text" rows="3" maxlength="5000"
+        placeholder="说点什么，比如：明天把包装方案发给阿哲 #选品"></textarea>
+      <div class="capture-actions">
+        <button id="recordBtn" class="record" type="button">
+          <span class="dot"></span><span id="recordLabel">开始记录</span>
+        </button>
+        <button id="submitBtn" class="primary" type="button">收进拾念</button>
+      </div>
+      <p class="hint" id="hint">未配置语音服务时，直接用文字记录；配置后支持说完自动整理。</p>
+    </section>
+
+    <section class="spatial-preview" aria-label="Rokid AR 眼镜视角模拟">
+      <div class="hud-box">
+        <div class="hud-header">
+          <span class="hud-dot"></span>
+          <span class="hud-status">ROKID GLASSES HUD · 1.5s 极速确认</span>
+          <span class="hud-time" id="hudClock">15:09</span>
+        </div>
+        <div class="hud-content" id="hudContent">
+          <p class="hud-prompt" id="hudPrompt">轻触镜腿或说「记一下」…</p>
+          <div class="hud-card-preview" id="hudCardPreview" hidden>
+            <div class="hud-tag" id="hudTag">灵感</div>
+            <div class="hud-title" id="hudTitle">包装方案讨论</div>
+            <div class="hud-action" id="hudAction">→ 明天把包装方案发给阿哲</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <input id="search" type="search" placeholder="搜索想法、人物、标签…">
+      <div class="filters" id="filters">
+        <button class="chip active" data-type="" type="button">全部</button>
+        <button class="chip" data-type="灵感" type="button">灵感</button>
+        <button class="chip" data-type="待办" type="button">待办</button>
+        <button class="chip" data-type="决策" type="button">决策</button>
+        <button class="chip" data-type="引用" type="button">引用</button>
+        <button class="chip" data-type="素材" type="button">素材</button>
+        <button class="chip" data-type="其他" type="button">其他</button>
+      </div>
+    </section>
+
+    <main id="list" class="list" aria-live="polite"></main>
+    <footer class="foot">拾念 · Spatial Joy 2026 · AIUI 智能体</footer>
+  </div>
+
+  <div class="modal" id="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="modalTitle">本周回顾</h2>
+        <button id="closeModal" class="icon" type="button" aria-label="关闭">×</button>
+      </div>
+      <pre id="modalBody" class="review-text"></pre>
+      <div class="modal-actions">
+        <button id="exportObsidianBtn" class="primary" type="button">导出 Obsidian Zip</button>
+        <button id="copyBtn" class="ghost" type="button">复制文案</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
