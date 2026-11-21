@@ -139,7 +139,68 @@ function initStellarNetwork() {
       node.projY = canvas.height / 2 + node.y3d * scale * 1.2;
       node.scale = scale;
     });
+
+    // 拖拽后的缓动摩擦力阻尼减速（Damping Effect）
+    if (!isDragging) {
+      stellarAngleX *= 0.95;
+      stellarAngleY *= 0.95;
+      // 保持微弱的背景自转
+      if (Math.abs(stellarAngleX) < 0.002) stellarAngleX = 0.0015;
+      if (Math.abs(stellarAngleY) < 0.002) stellarAngleY = 0.0015;
+    }
   }
+
+  // ================= 增加鼠标和手势触控 3D 旋转交互 =================
+  let isDragging = false;
+  let previousMousePosition = { x: 0, y: 0 };
+
+  canvas.addEventListener("mousedown", (e) => {
+    isDragging = true;
+    previousMousePosition = { x: e.clientX, y: e.clientY };
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const deltaMove = {
+      x: e.clientX - previousMousePosition.x,
+      y: e.clientY - previousMousePosition.y
+    };
+
+    // 旋转角速度随拖拽距离变化
+    stellarAngleY = deltaMove.x * 0.005;
+    stellarAngleX = -deltaMove.y * 0.005;
+
+    previousMousePosition = { x: e.clientX, y: e.clientY };
+  });
+
+  window.addEventListener("mouseup", () => {
+    isDragging = false;
+  });
+
+  // 支持手机端/AR触控交互
+  canvas.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      isDragging = true;
+      previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  });
+
+  window.addEventListener("touchmove", (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const deltaMove = {
+      x: e.touches[0].clientX - previousMousePosition.x,
+      y: e.touches[0].clientY - previousMousePosition.y
+    };
+
+    stellarAngleY = deltaMove.x * 0.008;
+    stellarAngleX = -deltaMove.y * 0.008;
+
+    previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  });
+
+  window.addEventListener("touchend", () => {
+    isDragging = false;
+  });
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
