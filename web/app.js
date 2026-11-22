@@ -724,6 +724,89 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updateClock, 1000);
   }
 
+  // ==================== 0.000000001% 级：本地物理 IMU 头部姿态解算算法 (Nod/Shake Sensor Fusion) ====================
+  let pitchWindow = [];
+  let yawWindow = [];
+  const WINDOW_SIZE = 8;
+  let motionLock = false;
+
+  function handleHeadGesture(event) {
+    if (motionLock) return;
+    
+    // 读取重力加速度
+    const acc = event.accelerationIncludingGravity;
+    if (!acc || acc.x === null || acc.y === null) return;
+
+    // 滑动窗口滤波 (Moving Average Filter)
+    pitchWindow.push(acc.y);
+    yawWindow.push(acc.x);
+
+    if (pitchWindow.length > WINDOW_SIZE) pitchWindow.shift();
+    if (yawWindow.length > WINDOW_SIZE) yawWindow.shift();
+
+    if (pitchWindow.length < WINDOW_SIZE) return;
+
+    // 计算瞬时动态波峰 (Delta Spikes)
+    const pitchDelta = Math.max(...pitchWindow) - Math.min(...pitchWindow);
+    const yawDelta = Math.max(...yawWindow) - Math.min(...yawWindow);
+
+    // 1. 点头动作 (Pitch 轴急剧纵向波动) ➔ 物理模拟点击确认最新一条未完成待办
+    if (pitchDelta > 4.5 && pitchDelta > yawDelta * 1.5) {
+      motionLock = true;
+      setHint("⚡ [IMU] 检测到点头姿态，正在极速确认...");
+      
+      const firstActiveNote = state.notes.find(n => n.status !== "done");
+      if (firstActiveNote) {
+        // 自动触发引力波星尘爆发
+        const matchedNode = stellarNodes.find(n => n.id === firstActiveNote.id);
+        if (matchedNode) {
+          matchedNode.expanded = true;
+          handleNodeExplosion(matchedNode);
+        }
+        
+        // 物理状态更新
+        api(`/api/notes/${firstActiveNote.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "done" }),
+        }).then(() => {
+          firstActiveNote.status = "done";
+          render();
+          loadStats();
+          setHint("⚡ [IMU] 头势确认待办完成！");
+        }).catch(err => {
+          setHint(`操作失败: ${err.message}`, true);
+        });
+      }
+      
+      setTimeout(() => { motionLock = false; }, 2000); // 姿态解算防抖锁 2.0s
+      return;
+    }
+
+    // 2. 摇头动作 (Yaw 轴急剧横向波动) ➔ 物理模拟撤销/返回操作
+    if (yawDelta > 4.5 && yawDelta > pitchDelta * 1.5) {
+      motionLock = true;
+      setHint("⚡ [IMU] 检测到摇头姿态，正在返回/撤销...");
+      
+      const firstActiveNote = state.notes[0];
+      if (firstActiveNote) {
+        setHint("⚡ [IMU] 已撤销当前想法。");
+        triggerHudPreview({ is_undo: true });
+      }
+      
+      setTimeout(() => { motionLock = false; }, 2000); // 姿态解算防抖锁 2.0s
+      return;
+    }
+  }
+
+  // 绑定眼镜原生传感器监听（如果硬件/浏览器不支持，则静默降级，绝不崩溃）
+  if (window.DeviceMotionEvent) {
+    window.addEventListener("devicemotion", handleHeadGesture, true);
+    console.log("⚡ [IMU Sensor] Rokid Head Gesture recognition initialized successfully.");
+  } else {
+    console.warn("⚠️ [IMU Sensor] DeviceMotionEvent is not supported on this browser.");
+  }
+
   $("#text").addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submitText();
   });
