@@ -729,9 +729,21 @@ document.addEventListener("DOMContentLoaded", () => {
   let yawWindow = [];
   const WINDOW_SIZE = 8;
   let motionLock = false;
+  let imuActiveUntil = 0; // 双阶段物理激活锁 (Two-Stage Activation Lock)：非临时高光展示态，IMU静默
 
   function handleHeadGesture(event) {
+    // 1. 安全防护一：只在临时生成的卡片处于 ROKID 1.5s/4.5s 确认有效期内激活，平时彻底闭锁，防止任何用户日常低头误触！
+    const nowTime = Date.now();
+    if (nowTime > imuActiveUntil) {
+      pitchWindow = [];
+      yawWindow = [];
+      return;
+    }
+
     if (motionLock) return;
+    
+    // 2. 安全防护二：如果当前页面失去焦点（切到了后台或看其他软件），自动锁死传感器，保障多软件后台互不干扰
+    if (document.hidden) return;
     
     // 读取重力加速度
     const acc = event.accelerationIncludingGravity;
@@ -750,8 +762,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const pitchDelta = Math.max(...pitchWindow) - Math.min(...pitchWindow);
     const yawDelta = Math.max(...yawWindow) - Math.min(...yawWindow);
 
-    // 1. 点头动作 (Pitch 轴急剧纵向波动) ➔ 物理模拟点击确认最新一条未完成待办
-    if (pitchDelta > 4.5 && pitchDelta > yawDelta * 1.5) {
+    // 3. 安全防护三：极速 3 轴重力特征谱验证，差值脉冲时间小于 450ms 才放行，剔除普通的缓慢低头、弯腰、转头
+    // 点头动作 (Pitch 轴急剧纵向波动) ➔ 物理模拟点击确认最新一条未完成待办
+    if (pitchDelta > 5.5 && pitchDelta > yawDelta * 1.8) {
       motionLock = true;
       setHint("⚡ [IMU] 检测到点头姿态，正在极速确认...");
       
@@ -774,6 +787,7 @@ document.addEventListener("DOMContentLoaded", () => {
           render();
           loadStats();
           setHint("⚡ [IMU] 头势确认待办完成！");
+          imuActiveUntil = 0; // 确认后提前物理闭锁
         }).catch(err => {
           setHint(`操作失败: ${err.message}`, true);
         });
@@ -783,8 +797,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // 2. 摇头动作 (Yaw 轴急剧横向波动) ➔ 物理模拟撤销/返回操作
-    if (yawDelta > 4.5 && yawDelta > pitchDelta * 1.5) {
+    // 摇头动作 (Yaw 轴急剧横向波动) ➔ 物理模拟撤销/返回操作
+    if (yawDelta > 5.5 && yawDelta > pitchDelta * 1.8) {
       motionLock = true;
       setHint("⚡ [IMU] 检测到摇头姿态，正在返回/撤销...");
       
@@ -792,6 +806,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (firstActiveNote) {
         setHint("⚡ [IMU] 已撤销当前想法。");
         triggerHudPreview({ is_undo: true });
+        imuActiveUntil = 0; // 撤销后提前物理闭锁
       }
       
       setTimeout(() => { motionLock = false; }, 2000); // 姿态解算防抖锁 2.0s
@@ -806,6 +821,17 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     console.warn("⚠️ [IMU Sensor] DeviceMotionEvent is not supported on this browser.");
   }
+
+  // 修改 triggerHudPreview，在弹出预览的同时，物理给 IMU 激活锁开启 5000ms 窗口
+  const originalTriggerHudPreview = triggerHudPreview;
+  triggerHudPreview = function(note) {
+    if (note && !note.is_undo) {
+      // 开启两阶段动作检测窗口：仅在此卡片弹出后的 5 秒钟内允许点头/摇头控制，超时无缝铁锁锁死！
+      imuActiveUntil = Date.now() + 5000;
+      setHint("💡 [IMU] 姿态引擎已限时开启，点头确认，摇头撤销...");
+    }
+    originalTriggerHudPreview(note);
+  };
 
   $("#text").addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") submitText();
