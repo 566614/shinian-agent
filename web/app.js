@@ -150,43 +150,76 @@ function initStellarNetwork() {
     }
   }
 
-  function handleNodeExplosion(node) {
-  const explosionRadius = 10; // 子星的扩散范围
-  const explosionParticleCount = 8; // 爆发出的星光点数量
-
-  for (let i = 0; i < explosionParticleCount; i++) {
-    const angle = (Math.PI * 2 * i) / explosionParticleCount;
-    const posX = node.x3d + explosionRadius * Math.cos(angle);
-    const posY = node.y3d + explosionRadius * Math.sin(angle);
-    const posZ = node.z3d;
-
-    stellarNodes.push({
-      x3d: posX,
-      y3d: posY,
-      z3d: posZ,
-      projX: canvas.width / 2 + posX,
-      projY: canvas.height / 2 + posY,
-      scale: 0.2
-    });
-
-    stellarLinks.push({
-      source: node,
-      target: stellarNodes[stellarNodes.length - 1]
-    });
-  }
-}
-
-canvas.addEventListener("click", (e) => {
-  const clickedNode = detectClickedNode(e.clientX, e.clientY);
-  if (clickedNode) {
-    clickedNode.expanded = true; // 标记为扩展状态
-    handleNodeExplosion(clickedNode); // 触发爆发动画
-  }
-});
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
   let hoveredNode = null;
   let clickedNode = null;
+  let rippleRing = null; // 星云诞生爆发扩散水波纹动效 [Ripple Ring]
+
+  function detectClickedNode(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = clientX - rect.left;
+    const mouseY = clientY - rect.top;
+    let clicked = null;
+    stellarNodes.forEach((node) => {
+      const dist = Math.hypot(node.projX - mouseX, node.projY - mouseY);
+      if (dist < (node.size * node.scale + 8)) {
+        clicked = node;
+      }
+    });
+    return clicked;
+  }
+
+  function handleNodeExplosion(node) {
+    const explosionRadius = 15; // 子星的扩散范围
+    const explosionParticleCount = 6; // 爆发出的星光点数量
+
+    // 1. 触发爆发扩散水波纹特效 [S+ 级星尘诞生波动]
+    rippleRing = {
+      x: node.projX,
+      y: node.projY,
+      radius: node.size * node.scale,
+      maxRadius: 100,
+      alpha: 1.0,
+      color: node.color
+    };
+
+    // 2. 物理追加粒子微星尘
+    for (let i = 0; i < explosionParticleCount; i++) {
+      const angle = (Math.PI * 2 * i) / explosionParticleCount;
+      const posX = node.x3d + explosionRadius * Math.cos(angle);
+      const posY = node.y3d + explosionRadius * Math.sin(angle);
+      const posZ = node.z3d + (Math.random() - 0.5) * 10;
+
+      stellarNodes.push({
+        id: "gen-" + Date.now() + "-" + i,
+        title: "微光星尘 #" + i,
+        type: "灵感",
+        color: "#ffffff",
+        x3d: posX,
+        y3d: posY,
+        z3d: posZ,
+        size: 2,
+        projX: 0,
+        projY: 0,
+        scale: 0.1,
+        visible: true
+      });
+
+      stellarLinks.push({
+        source: node,
+        target: stellarNodes[stellarNodes.length - 1]
+      });
+    }
+  }
+
+  canvas.addEventListener("click", (e) => {
+    const clicked = detectClickedNode(e.clientX, e.clientY);
+    if (clicked) {
+      clicked.expanded = true; // 标记为扩展状态
+      handleNodeExplosion(clicked); // 触发爆发动画
+    }
+  });
 
   // 鼠标悬停及交互探测 (S+级空间碰撞检测)
   canvas.addEventListener("mousemove", (e) => {
@@ -339,6 +372,22 @@ canvas.addEventListener("click", (e) => {
       }
     });
 
+    // 4. 绘制星云诞生爆发扩散水波纹动效 [Ripple Ring Effect]
+    if (rippleRing) {
+      ctx.strokeStyle = rippleRing.color;
+      ctx.lineWidth = 2 * rippleRing.alpha;
+      ctx.beginPath();
+      ctx.arc(rippleRing.x, rippleRing.y, rippleRing.radius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 渐进扩散物理演算
+      rippleRing.radius += 3;
+      rippleRing.alpha -= 0.03;
+      if (rippleRing.radius >= rippleRing.maxRadius || rippleRing.alpha <= 0) {
+        rippleRing = null; // 扩散完毕后销毁
+      }
+    }
+
     requestAnimationFrame(draw);
   }
 
@@ -371,6 +420,7 @@ function cardHtml(note) {
       <div class="actions">
         <button data-act="toggle">${done ? "恢复待办" : "标记完成"}</button>
         <button data-act="card">分享卡片</button>
+        <button data-act="poster">高美海报</button>
         <button data-act="delete">删除</button>
       </div>
     </article>`;
@@ -708,6 +758,9 @@ document.addEventListener("DOMContentLoaded", () => {
         state.notes = state.notes.filter((item) => String(item.id) !== id);
       } else if (button.dataset.act === "card") {
         window.open(`/api/export/card/${id}`, "_blank");
+        return;
+      } else if (button.dataset.act === "poster") {
+        window.open(`/api/export/poster/${id}`, "_blank");
         return;
       } else if (note) {
         const next = note.status === "done" ? "inbox" : "done";
