@@ -73,7 +73,40 @@ def export_obsidian_zip(store: Store) -> bytes:
     all_map = {n["id"]: n["title"] for n in notes}
     
     # S+ 级多路径智能容错同步机制 (Pristine Obsidian Path Discovery & Fallback)
-    vault_path_str = os.getenv("SHINIAN_OBSIDIAN_VAULT", "C:/Users/Lenovo/Desktop/阮/Wiki/Inbox/").strip() or "C:/Users/Lenovo/Desktop/阮/Wiki/Inbox/"
+        vault_root = None
+    candidate_paths = [
+        vault_path_str,
+        "C:/Users/Lenovo/Desktop/阮/Wiki/Inbox/",
+        "C:/Users/Lenovo/Desktop/阮/",
+        "~/Desktop/阮/Wiki/Inbox/",
+        "./data/obsidian/"
+    ]
+    
+    for path_candidate in candidate_paths:
+        try:
+            expanded_path = Path(path_candidate).expanduser()
+            # 智能判定：定位 Obsidian Vault 的主物理根目录
+            if "Wiki/Inbox" in str(expanded_path).replace("\\", "/"):
+                root_test = expanded_path.parent.parent
+            else:
+                root_test = expanded_path
+            
+            test_dir = root_test / "Wiki" / "Notes"
+            test_dir.mkdir(parents=True, exist_ok=True)
+            test_file = test_dir / ".shinian_write_test"
+            test_file.write_text("ok", encoding="utf-8")
+            test_file.unlink()
+            
+            vault_root = root_test
+            break
+        except Exception:
+            continue
+
+    if not vault_root:
+        fallback_path = "C:/Users/Lenovo/Desktop/FallbackVault/"
+        vault_root = Path(fallback_path)
+        vault_root.mkdir(parents=True, exist_ok=True)
+        print(f"Fallback to default vault location: {fallback_path}")
     vault_root = None
     
     # 尝试多条安全备选路径进行热同步

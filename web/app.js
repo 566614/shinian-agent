@@ -150,7 +150,39 @@ function initStellarNetwork() {
     }
   }
 
-  // ================= 增加鼠标和手势触控 3D 旋转交互 + 节点点击悬停震动交互 =================
+  function handleNodeExplosion(node) {
+  const explosionRadius = 10; // 子星的扩散范围
+  const explosionParticleCount = 8; // 爆发出的星光点数量
+
+  for (let i = 0; i < explosionParticleCount; i++) {
+    const angle = (Math.PI * 2 * i) / explosionParticleCount;
+    const posX = node.x3d + explosionRadius * Math.cos(angle);
+    const posY = node.y3d + explosionRadius * Math.sin(angle);
+    const posZ = node.z3d;
+
+    stellarNodes.push({
+      x3d: posX,
+      y3d: posY,
+      z3d: posZ,
+      projX: canvas.width / 2 + posX,
+      projY: canvas.height / 2 + posY,
+      scale: 0.2
+    });
+
+    stellarLinks.push({
+      source: node,
+      target: stellarNodes[stellarNodes.length - 1]
+    });
+  }
+}
+
+canvas.addEventListener("click", (e) => {
+  const clickedNode = detectClickedNode(e.clientX, e.clientY);
+  if (clickedNode) {
+    clickedNode.expanded = true; // 标记为扩展状态
+    handleNodeExplosion(clickedNode); // 触发爆发动画
+  }
+});
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
   let hoveredNode = null;
