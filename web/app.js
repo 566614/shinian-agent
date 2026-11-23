@@ -724,45 +724,54 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updateClock, 1000);
   }
 
-  // ==================== 0.000000001% 级：本地物理 IMU 头部姿态解算算法 (Nod/Shake Sensor Fusion) ====================
-  let pitchWindow = [];
-  let yawWindow = [];
-  const WINDOW_SIZE = 8;
+  // ==================== 本地物理 IMU 头部姿态解算 (Nod/Shake) + 三重防误触装甲 ====================
+  // 防误触一：两阶段激活锁（只在卡片预览窗口内开锁）；防误触二：焦点锁（切后台即闭锁）；
+  // 防误触三：450ms 时间硬截止脉冲验证（缓慢低头/弯腰/扭头一律过滤）
+  let pitchSamples = [];   // 每个元素：{ v: 加速度值, t: 采样时间戳 }
+  let yawSamples = [];
+  const IMPULSE_WINDOW_MS = 450; // 时间硬截止：只有 450ms 内完成的「前倾-回弹」才算交互脉冲
+  const MIN_SAMPLES = 4;         // 至少 4 个采样点才判定，避免单点噪声误判
   let motionLock = false;
-  let imuActiveUntil = 0; // 双阶段物理激活锁 (Two-Stage Activation Lock)：非临时高光展示态，IMU静默
+  let imuActiveUntil = 0; // 两阶段物理激活锁：非卡片预览确认期，IMU 完全静默
+
+  function resetImuSamples() {
+    pitchSamples = [];
+    yawSamples = [];
+  }
 
   function handleHeadGesture(event) {
-    // 1. 安全防护一：只在临时生成的卡片处于 ROKID 1.5s/4.5s 确认有效期内激活，平时彻底闭锁，防止任何用户日常低头误触！
+    // 防误触一：只在卡片弹出后的确认有效期内激活，平时彻底闭锁，日常低头/看路绝不触发
     const nowTime = Date.now();
     if (nowTime > imuActiveUntil) {
-      pitchWindow = [];
-      yawWindow = [];
+      resetImuSamples();
       return;
     }
 
     if (motionLock) return;
-    
-    // 2. 安全防护二：如果当前页面失去焦点（切到了后台或看其他软件），自动锁死传感器，保障多软件后台互不干扰
-    if (document.hidden) return;
-    
-    // 读取重力加速度
+
+    // 防误触二：页面失去焦点（切到其他软件/后台）立即闭锁，把传感器控制权交还系统
+    if (document.hidden) {
+      resetImuSamples();
+      return;
+    }
+
     const acc = event.accelerationIncludingGravity;
     if (!acc || acc.x === null || acc.y === null) return;
 
-    // 滑动窗口滤波 (Moving Average Filter)
-    pitchWindow.push(acc.y);
-    yawWindow.push(acc.x);
+    const t = Date.now();
+    pitchSamples.push({ v: acc.y, t });
+    yawSamples.push({ v: acc.x, t });
 
-    if (pitchWindow.length > WINDOW_SIZE) pitchWindow.shift();
-    if (yawWindow.length > WINDOW_SIZE) yawWindow.shift();
+    // 防误触三：基于时间窗（非固定帧数）剔除超过 450ms 的旧样本 —— 缓慢低头/弯腰会随时间被自然过滤
+    while (pitchSamples.length && t - pitchSamples[0].t > IMPULSE_WINDOW_MS) pitchSamples.shift();
+    while (yawSamples.length && t - yawSamples[0].t > IMPULSE_WINDOW_MS) yawSamples.shift();
 
-    if (pitchWindow.length < WINDOW_SIZE) return;
+    if (pitchSamples.length < MIN_SAMPLES) return;
 
-    // 计算瞬时动态波峰 (Delta Spikes)
-    const pitchDelta = Math.max(...pitchWindow) - Math.min(...pitchWindow);
-    const yawDelta = Math.max(...yawWindow) - Math.min(...yawWindow);
+    // 计算窗口内的波峰-波谷差值（Pulse Amplitude）
+    const pitchDelta = Math.max(...pitchSamples.map(s => s.v)) - Math.min(...pitchSamples.map(s => s.v));
+    const yawDelta = Math.max(...yawSamples.map(s => s.v)) - Math.min(...yawSamples.map(s => s.v));
 
-    // 3. 安全防护三：极速 3 轴重力特征谱验证，差值脉冲时间小于 450ms 才放行，剔除普通的缓慢低头、弯腰、转头
     // 点头动作 (Pitch 轴急剧纵向波动) ➔ 物理模拟点击确认最新一条未完成待办
     if (pitchDelta > 5.5 && pitchDelta > yawDelta * 1.8) {
       motionLock = true;
