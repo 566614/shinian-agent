@@ -162,6 +162,7 @@ function initStellarNetwork() {
     const mouseY = clientY - rect.top;
     let clicked = null;
     stellarNodes.forEach((node) => {
+      if (node.isParticle) return; // 星尘粒子是视觉效果，不参与点击命中
       const dist = Math.hypot(node.projX - mouseX, node.projY - mouseY);
       if (dist < (node.size * node.scale + 8)) {
         clicked = node;
@@ -203,7 +204,10 @@ function initStellarNetwork() {
         projX: 0,
         projY: 0,
         scale: 0.1,
-        visible: true
+        visible: true,
+        isParticle: true,
+        bornAt: Date.now(),
+        lifeMs: 2600
       });
 
       stellarLinks.push({
@@ -264,6 +268,7 @@ function initStellarNetwork() {
     // 点击节点触发记忆共振 (S+级全息引力波震动)
     let clicked = null;
     stellarNodes.forEach((node) => {
+      if (node.isParticle) return; // 星尘粒子不可点击，避免误触
       const dist = Math.hypot(node.projX - mouseX, node.projY - mouseY);
       if (dist < (node.size * node.scale + 8)) {
         clicked = node;
@@ -343,14 +348,34 @@ function initStellarNetwork() {
       ctx.stroke();
     });
 
-    // 3. 绘制灵感卡片节点
+    // 3. 绘制灵感卡片节点（含星尘粒子淡出 + 到期回收，防止节点无限累积）
+    const nowMs = Date.now();
+    for (let i = stellarNodes.length - 1; i >= 0; i--) {
+      const node = stellarNodes[i];
+      if (!node.isParticle) continue;
+      const age = nowMs - node.bornAt;
+      if (age >= node.lifeMs) {
+        // 到期：移除粒子本身及其关联连线
+        stellarNodes.splice(i, 1);
+        for (let j = stellarLinks.length - 1; j >= 0; j--) {
+          if (stellarLinks[j].source === node || stellarLinks[j].target === node) {
+            stellarLinks.splice(j, 1);
+          }
+        }
+        continue;
+      }
+      // 淡出：生命末段线性衰减亮度
+      node.fadeOut = 1 - age / node.lifeMs;
+    }
+
     stellarNodes.forEach((node) => {
-      const alpha = node.scale * 0.8;
+      const fade = node.isParticle ? (node.fadeOut != null ? node.fadeOut : 1) : 1;
       const r = Math.max(1, node.size * node.scale * 0.8);
+      ctx.globalAlpha = fade; // 统一用 globalAlpha 控制淡出，对每个节点生效
 
       // 外圈光晕 (Glow Effect)
       const grad = ctx.createRadialGradient(node.projX, node.projY, 0, node.projX, node.projY, r * 3);
-      grad.addColorStop(0, `${node.color}`);
+      grad.addColorStop(0, node.color);
       grad.addColorStop(1, "rgba(0, 0, 0, 0)");
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -364,12 +389,13 @@ function initStellarNetwork() {
       ctx.fill();
 
       // 文字浮现：高价值（大尺寸）或距离镜头近的节点浮现文字
-      if (node.scale > 0.95) {
+      if (node.scale > 0.95 && !node.isParticle) {
         ctx.fillStyle = `rgba(255, 255, 255, ${(node.scale - 0.95) * 10})`;
         ctx.font = "9px monospace";
         ctx.textAlign = "center";
         ctx.fillText(node.title, node.projX, node.projY - r - 6);
       }
+      ctx.globalAlpha = 1; // 复位，避免污染后续绘制（连线/波纹）
     });
 
     // 4. 绘制星云诞生爆发扩散水波纹动效 [Ripple Ring Effect]
