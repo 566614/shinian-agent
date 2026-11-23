@@ -560,6 +560,7 @@ let dataArray = null;
 let sourceNode = null;
 let drawVisual = null;
 let audioStream = null;
+let waveResizeHandler = null; // 防止每次录音重复注册 resize 监听器造成泄漏
 
 function initWaveCanvas() {
   const canvas = $("#hudWaveCanvas");
@@ -569,8 +570,16 @@ function initWaveCanvas() {
   function resize() {
     canvas.width = waveContainer.clientWidth;
     canvas.height = waveContainer.clientHeight;
+    gradientCache.clear(); // 画布尺寸变化后旧渐变坐标失效，清空缓存
   }
+  // 若上次录音注册过 resize 监听，先移除，避免监听器与旧 canvas 引用累积泄漏
+  if (waveResizeHandler) {
+    window.removeEventListener("resize", waveResizeHandler);
+  }
+  waveResizeHandler = resize;
   window.addEventListener("resize", resize);
+
+  const gradientCache = new Map(); // 按柱高缓存渐变，避免每帧每根柱子都新建
   resize();
 
   function draw() {
@@ -591,11 +600,16 @@ function initWaveCanvas() {
       barHeight = dataArray[i] / 2;
       if (barHeight < 2) barHeight = 2; // 哪怕没有声音，也有微弱的律动
 
-      // Rokid Glasses 经典的荧光绿、青色渐变
-      const gradient = canvasCtx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight);
-      gradient.addColorStop(0, "rgba(0, 255, 204, 0.2)");
-      gradient.addColorStop(0.5, "rgba(0, 255, 204, 0.8)");
-      gradient.addColorStop(1, "rgba(56, 189, 248, 1)");
+      // Rokid Glasses 经典的荧光绿、青色渐变（按量化柱高缓存，避免每帧重复创建）
+      const hKey = Math.round(barHeight);
+      let gradient = gradientCache.get(hKey);
+      if (!gradient) {
+        gradient = canvasCtx.createLinearGradient(0, canvas.height, 0, canvas.height - hKey);
+        gradient.addColorStop(0, "rgba(0, 255, 204, 0.2)");
+        gradient.addColorStop(0.5, "rgba(0, 255, 204, 0.8)");
+        gradient.addColorStop(1, "rgba(56, 189, 248, 1)");
+        gradientCache.set(hKey, gradient);
+      }
 
       canvasCtx.fillStyle = gradient;
       canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
